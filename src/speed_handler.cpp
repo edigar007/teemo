@@ -20,7 +20,7 @@ namespace teemo {
 SpeedHandler::SpeedHandler(int64_t already_download,
                            Options* options,
                            std::shared_ptr<SliceManager> slice_manager)
-    : already_download_(already_download), options_(options), slice_manager_(slice_manager) {
+    : already_download_(already_download), options_(options), slice_manager_(slice_manager), last_(already_download) {
   if (options_ && slice_manager_) {
     async_task_ = std::async(std::launch::async, std::bind(&SpeedHandler::asyncTaskProcess, this));
   }
@@ -40,10 +40,10 @@ void SpeedHandler::asyncTaskProcess() {
     if (options_ && slice_manager_) {
       int64_t now = slice_manager_->totalDownloaded();
 
-      static int64_t last = already_download_;
-      if (now >= last) {
-        int64_t downloaded = now - last;
-        last = now;
+      //last_ = already_download_;
+      if (now >= last_) {
+        int64_t downloaded = now - last_;
+        last_ = now;
         options_->speed_functor(downloaded);
       }
     }

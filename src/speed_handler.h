@@ -37,6 +37,7 @@ class SpeedHandler {
   const int64_t already_download_;
   const Options* options_;
   std::shared_ptr<SliceManager> slice_manager_;
+  int64_t last_;
 };
 }  // namespace teemo
 #endif  // !TEEMO_SPEED_HANDLER_H_
