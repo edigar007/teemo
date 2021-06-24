@@ -1,5 +1,5 @@
 /*******************************************************************************
-* Copyright (C) 2018 - 2020, winsoft666, <winsoft666@outlook.com>.
+* Copyright (C) 2019 - 2023, winsoft666, <winsoft666@outlook.com>.
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
 * EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED
@@ -12,29 +12,34 @@
 * file.
 *******************************************************************************/
 
-#ifndef TEEMO_PROGRESS_HANDLER_H_
-#define TEEMO_PROGRESS_HANDLER_H_
+#ifndef TEEMO_TIME_METER_H_
+#define TEEMO_TIME_METER_H_
 #pragma once
 
-#include "teemo/teemo.h"
-#include "slice_manager.h"
+#include <stdint.h>
+#include <time.h>
+#include <ctime>
+#include <limits>
 
 namespace teemo {
-typedef struct _Options Options;
-
-class ProgressHandler {
+class TimeMeter {
  public:
-  ProgressHandler(Options* options,
-                  std::shared_ptr<SliceManager> slice_manager);
-  virtual ~ProgressHandler();
+  TimeMeter() { lStartTime_ = std::clock(); }
 
- protected:
-  void asyncTaskProcess();
+  void Restart() { lStartTime_ = std::clock(); }
 
- protected:
-  std::shared_future<void> async_task_;
-  const Options* options_;
-  std::shared_ptr<SliceManager> slice_manager_;
+  // ms
+  long Elapsed() const { return std::clock() - lStartTime_; }
+
+  long ElapsedMax() const {
+    return (std::numeric_limits<std::clock_t>::max)() - lStartTime_;
+  }
+
+  long ElapsedMin() const { return 1L; }
+
+ private:
+  std::clock_t lStartTime_;
 };
 }  // namespace teemo
-#endif  // !TEEMO_PROGRESS_HANDLER_H_
+
+#endif

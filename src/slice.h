@@ -20,19 +20,26 @@
 #include <mutex>
 #include <memory>
 #include <atomic>
-#include "slice_manager.h"
 #include "target_file.h"
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
+struct curl_slist;
 namespace teemo {
 class SliceManager;
 class Slice {
  public:
-   enum Status {
-     UNFETCH = 0,
-     FETCHED = 1,
-     DOWNLOADING = 2,
-     DOWNLOAD_FAILED = 3
-   };
+  enum Status {
+    UNFETCH = 0,
+    FETCHED = 1,
+    DOWNLOADING = 2,
+    DOWNLOAD_FAILED = 3,
+    INIT_FAILED = 4,
+    DOWNLOAD_COMPLETED = 5
+  };
   Slice(int32_t index,
         int64_t begin,
         int64_t end,
@@ -49,21 +56,24 @@ class Slice {
   int64_t diskCacheCapacity() const;
 
   int32_t index() const;
+  void* curlHandle();
 
   Result start(void* multi, int64_t disk_cache_size, int32_t max_speed);
-  void stop(void* multi);
+  Result stop(void* multi);
 
-  void setFetched();
+  void setStatus(Slice::Status s);
   Status status() const;
 
-  bool isCompleted();
+  void increaseFailedTimes();
+  int32_t failedTimes() const;
+
+  // if end_ is -1, this function will return false.
+  bool isDataCompleted();
 
   bool onNewData(const char* p, long size);
   bool flushToDisk();
-
  protected:
   void tryFreeDiskCacheBuffer();
-
  protected:
   int32_t index_;
   int64_t begin_;
@@ -71,14 +81,22 @@ class Slice {
   std::atomic<int64_t> capacity_;  // data size in disk file
 
   void* curl_;
+  struct curl_slist* header_chunk_;
 
   int64_t disk_cache_size_;  // byte
-  std::atomic<int64_t> disk_cache_capacity_;
+  std::atomic<int64_t> disk_cache_capacity_; // data size in cache.
   char* disk_cache_buffer_;
 
   Status status_;
+  int32_t failed_times_;
 
   std::shared_ptr<SliceManager> slice_manager_;
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+  CRITICAL_SECTION crit_;
+#else
+  pthread_mutex_t mutex_;
+#endif
 };
 }  // namespace teemo
-#endif // !TEEMO_SLICE_H_
+#endif  // !TEEMO_SLICE_H_

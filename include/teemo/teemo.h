@@ -18,6 +18,7 @@
 #include <string>
 #include <memory>
 #include <future>
+#include <map>
 
 #ifdef TEEMO_STATIC
 #define TEEMO_API
@@ -70,8 +71,11 @@ enum Result {
   SLICE_DOWNLOAD_FAILED,
   HASH_VERIFY_NOT_PASS,
   CALCULATE_HASH_FAILED,
-  FETCH_FILE_INFO_FAILED
+  FETCH_FILE_INFO_FAILED,
+  REDIRECT_URL_DIFFERENT
 };
+
+enum DownloadState { STOPPED = 0, DOWNLODING = 1, PAUSED = 2 };
 
 TEEMO_API const char* GetResultString(int enumVal);
 
@@ -103,6 +107,7 @@ typedef std::function<void(Result ret)> ResultFunctor;
 typedef std::function<void(int64_t total, int64_t downloaded)> ProgressFunctor;
 typedef std::function<void(int64_t byte_per_sec)> RealtimeSpeedFunctor;
 typedef std::function<void(const utf8string& verbose)> VerboseOuputFunctor;
+typedef std::multimap<utf8string, utf8string> HttpHeaders;
 
 class TEEMO_API Teemo {
  public:
@@ -126,14 +131,19 @@ class TEEMO_API Teemo {
   // This only limits the connection phase, it has no impact once it has connected.
   // Set to 0 or negative to switch to the default built-in connection timeout - 3000 milliseconds.
   //
-  Result setNetworkConnectionTimeout(int32_t milliseconds) noexcept;  // milliseconds
-  int32_t networkConnectionTimeout() const noexcept;                  // milliseconds
+  Result setNetworkConnectionTimeout(
+      int32_t milliseconds) noexcept;                 // milliseconds
+  int32_t networkConnectionTimeout() const noexcept;  // milliseconds
 
   // Pass an int specifying the retry times when request file information(such as file size) failed.
   // Set to 0 or negative to switch to the default built-in retry times - 1.
   //
   Result setFetchFileInfoRetryTimes(int32_t retry_times) noexcept;
   int32_t fetchFileInfoRetryTimes() const noexcept;
+
+  // If bUseHead is true, teemo will use HEAD method to fetch file info. Otherwise, teemo will use GET method.
+  Result setFetchFileInfoHeadMethod(bool use_head) noexcept;
+  bool fetchFileInfoHeadMethod() const noexcept;
 
   // Pass an int as parameter.
   // If the interval seconds that from the saved time of temporary file to present greater than or equal to this parameter, the temporary file will be discarded.
@@ -151,6 +161,17 @@ class TEEMO_API Teemo {
   Result setMaxDownloadSpeed(int32_t byte_per_seconds) noexcept;
   int32_t maxDownloadSpeed() const noexcept;
 
+  // Pass an int as parameter.
+  // If a download less than this speed (counted in bytes per second) during "low speed time" seconds,
+  // the transfer will be considered as failed.
+  // Default to -1, unlimited speed.
+  // Set to 0 or negative to switch to the default built-in limit - -1(unlimited speed).
+  //
+  Result setMinDownloadSpeed(int32_t byte_per_seconds,
+                             int32_t duration) noexcept; // seconds
+  int32_t minDownloadSpeed() const noexcept;
+  int32_t minDownloadSpeedDuration() const noexcept;  // seconds
+
   // Pass an unsigned int specifying your maximal size for the disk cache total buffer in teemo.
   // This buffer size is by default 20971520 byte (20MB).
   //
@@ -163,12 +184,19 @@ class TEEMO_API Teemo {
   Result setStopEvent(Event* stop_event) noexcept;
   Event* stopEvent() noexcept;
 
-  // Set true, teemo will not check whether the url passed by *start* is the same as in the index file,
-  // and in this case, if the url passed by *start* is empty, teemo will use the url in index file.
-  // Default to false, if the url passed by *start* is different from the url in the index file, teemo will return URL_DIFFERENT error.
+  // Set false, teemo will not check whether the redirected url is the same as in the index file,
+  // Default to true, if the redirected url is different from the url in the index file, teemo will return REDIRECT_URL_DIFFERENT error.
   //
-  Result setSkippingUrlCheck(bool skip) noexcept;
-  bool skippingUrlCheck() const noexcept;
+  Result setRedirectedUrlCheckEnabled(bool enabled) noexcept;
+  bool redirectedUrlCheckEnabled() const noexcept;
+
+  // Set true, teemo will parse Content-Md5 header filed and make sure target file's md5 is same as this value,
+  // and in this case, slice files will be expired if content_md5 value that cached in index file is changed.
+  // Content-Md5 is pure md5 string, not by base64.
+  // Default to false.
+  //
+  Result setContentMd5Enabled(bool enabled) noexcept;
+  bool contentMd5Enabled() const noexcept;
 
   // Set slice policy, tell teemo how to calculate each slice size.
   // Default: fixed to 10485760 bytes(10MB)
@@ -183,23 +211,33 @@ class TEEMO_API Teemo {
   Result setHashVerifyPolicy(HashVerifyPolicy policy,
                              HashType hash_type,
                              const utf8string& hash_value) noexcept;
-  void hashVerifyPolicy(HashVerifyPolicy& policy, HashType& hash_type, utf8string& hash_value) const
-      noexcept;
+  void hashVerifyPolicy(HashVerifyPolicy& policy,
+                        HashType& hash_type,
+                        utf8string& hash_value) const noexcept;
 
-  // Start to download.
+  Result setHttpHeaders(const HttpHeaders& headers) noexcept;
+  HttpHeaders httpHeaders() const noexcept;
+
+  // Start to download and state change to DOWNLOADING.
   // Supported url protocol is the same as libcurl.
   //
-  std::shared_future<Result> start(const utf8string& url,
-                                   const utf8string& target_file_path,
-                                   ResultFunctor result_functor,
-                                   ProgressFunctor progress_functor,
-                                   RealtimeSpeedFunctor realtime_speed_functor) noexcept;
+  std::shared_future<Result> start(
+      const utf8string& url,
+      const utf8string& target_file_path,
+      ResultFunctor result_functor,
+      ProgressFunctor progress_functor,
+      RealtimeSpeedFunctor realtime_speed_functor) noexcept;
 
-  // Stop downloading, teemo will return CANCELED.
+  // Pause downloading and state change to PAUSED.
+  //
+  void pause() noexcept;
+
+  // Resume downloading and state change to DOWNLOADING.
+  void resume() noexcept;
+
+  // Stop downloading and state change to STOPPED, teemo will return CANCELED in ResultFunctor.
   //
   void stop() noexcept;
-
-  bool isDownloading() noexcept;
 
   utf8string url() const noexcept;
   utf8string targetFilePath() const noexcept;
@@ -208,6 +246,9 @@ class TEEMO_API Teemo {
   // Set to (-1) when get original file size failed.
   //
   int64_t originFileSize() const noexcept;
+
+  DownloadState state() const noexcept;
+
  protected:
   class TeemoImpl;
   TeemoImpl* impl_;

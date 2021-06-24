@@ -21,19 +21,26 @@
 namespace teemo {
 #define TEEMO_DEFAULT_NETWORK_CONN_TIMEOUT_MS 3000
 #define TEEMO_DEFAULT_TOTAL_DISK_CACHE_SIZE_BYTE 20971520  // 20MB
-#define TEEMO_DEFAULT_FIXED_SLICE_SIZE_BYTE 10485760       // 10MB
+#define TEEMO_DEFAULT_FIXED_SLICE_SIZE_BYTE 10485760  // 10MB
 #define TEEMO_DEFAULT_FIXED_SLICE_NUM 1
 #define TEEMO_DEFAULT_FETCH_FILE_INFO_RETRY_TIMES 1
 #define TEEMO_DEFAULT_THREAD_NUM 1
+#define TEEMO_DEFAULT_SLICE_MAX_FAILED_TIMES 3
 
 typedef struct _Options {
-  bool skipping_url_check;
+  bool redirected_url_check_enabled;
+  bool content_md5_enabled;
+  bool use_head_method_fetch_file_info;
   int32_t thread_num;
   int32_t disk_cache_size;
   int32_t max_speed;
+  int32_t min_speed;
+  int32_t min_speed_duration;
   int32_t tmp_file_expired_time;
   int32_t fetch_file_info_retry;
   int32_t network_conn_timeout;
+
+  int32_t slice_max_failed_times;
 
   SlicePolicy slice_policy;
   int64_t slice_policy_value;
@@ -53,8 +60,12 @@ typedef struct _Options {
   utf8string url;
   utf8string target_file_path;
 
+  HttpHeaders http_headers;
+
   _Options() : internal_stop_event(true) {
-    skipping_url_check = false;
+    redirected_url_check_enabled = true;
+    content_md5_enabled = false;
+    use_head_method_fetch_file_info = true;
     thread_num = TEEMO_DEFAULT_THREAD_NUM;
     disk_cache_size = TEEMO_DEFAULT_TOTAL_DISK_CACHE_SIZE_BYTE;
 
@@ -65,9 +76,13 @@ typedef struct _Options {
     hash_type = MD5;
 
     max_speed = -1;
+    min_speed = -1;
+    min_speed_duration = 0;
     tmp_file_expired_time = -1;
     fetch_file_info_retry = TEEMO_DEFAULT_FETCH_FILE_INFO_RETRY_TIMES;
     network_conn_timeout = TEEMO_DEFAULT_NETWORK_CONN_TIMEOUT_MS;
+
+    slice_max_failed_times = TEEMO_DEFAULT_SLICE_MAX_FAILED_TIMES;
 
     result_functor = nullptr;
     progress_functor = nullptr;

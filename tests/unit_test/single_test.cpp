@@ -8,11 +8,15 @@ TEST(SingleTest, test1) {
   Teemo::GlobalInit();
 
   Teemo efd;
-  efd.setThreadNum(3);
-
+  efd.setThreadNum(6);
+  efd.setSlicePolicy(SlicePolicy::FixedSize, 1024000 * 5);
+  efd.setHashVerifyPolicy(ALWAYS, MD5, "cfc86ceb95503c7251941a4da0ce13a6");
+  efd.setHttpHeaders({{u8"Origin", u8"https://mysql.com"},
+                      {u8"User-Agent", u8"Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 5.1)"}});
 
   efd.start(
-      "http://n.sinaimg.cn/sports/2_img/dfic/cf0d0fdd/83/w1024h659/20200728/a854-iwxpesx4871320.jpg", "D:\\a854-iwxpesx4871320.jpg",
+      "https://cdn.mysql.com//Downloads/MySQL-8.0/mysql-8.0.23-winx64-debug-test.zip",
+      "mysql.zip",
       [](Result result) {
         printf("\nResult: %s\n", GetResultString(result));
         EXPECT_TRUE(result == SUCCESSED || result == CANCELED);
@@ -23,7 +27,13 @@ TEST(SingleTest, test1) {
       },
       nullptr);
 
-  system("pause");
+  //std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+  getchar();
+
+  efd.stop();
+
+  getchar();
 
   Teemo::GlobalUnInit();
 }

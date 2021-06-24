@@ -18,55 +18,66 @@
 
 #include <vector>
 #include <atomic>
-#include "slice.h"
 #include "teemo/teemo.h"
 #include "target_file.h"
+#include "slice.h"
 
 namespace teemo {
-class Slice;
 typedef struct _Options Options;
 
 class SliceManager : public std::enable_shared_from_this<SliceManager> {
  public:
-  SliceManager(Options* options);
+  SliceManager(Options* options, const utf8string& redirect_url);
   virtual ~SliceManager();
 
-  Result loadExistSlice();
+  Result loadExistSlice(int64_t cur_file_size,
+                        const utf8string& cur_content_md5);
+
+  bool flushAllSlices();
   bool flushIndexFile();
 
   void setOriginFileSize(int64_t file_size);
   int64_t originFileSize() const;
 
+  void setContentMd5(const utf8string& md5);
+  utf8string contentMd5() const;
+
   std::shared_ptr<TargetFile> targetFile();
 
-  Result tryMakeSlices();
+  Result makeSlices(bool accept_ranges);
 
   int64_t totalDownloaded() const;
 
-  bool isAllSliceCompleted() const;
+  Result isAllSliceCompleted(bool need_check_hash) const;
 
-  Result finishDownload();
+  Result finishDownloadProgress(bool need_check_completed, void* mult);
 
-  int32_t usefulSliceNum() const;
-  std::shared_ptr<Slice> fetchUsefulSlice(bool remove_completed_slice, void* mult);
+  int32_t getUnfetchAndUncompletedSliceNum() const;
+  std::shared_ptr<Slice> getUncompletedSlice(Slice::Status status);
+
+  std::shared_ptr<Slice> getSlice(void* curlHandle);
 
   const Options* options();
 
+  utf8string redirectUrl();
+
   utf8string indexFilePath() const;
 
+  void cleanup();
  protected:
   utf8string makeIndexFilePath() const;
-  Result calculateTmpFileHash(utf8string& str_hash);
-  void dumpSlice();
+  void dumpSlice() const;
  protected:
-  Options* options_;
+  utf8string redirect_url_;
   int64_t origin_file_size_;
+  utf8string content_md5_;
 
   utf8string index_file_path_;
-  utf8string tmp_file_path_;
 
   std::vector<std::shared_ptr<Slice>> slices_;
   std::shared_ptr<TargetFile> target_file_;
+
+  Options* options_;
 };
 }  // namespace teemo
 
